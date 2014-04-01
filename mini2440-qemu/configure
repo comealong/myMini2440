@@ -500,7 +500,7 @@ for opt do
 done
 
 # default flags for all hosts
-CFLAGS="$CFLAGS -O2 -g -fno-strict-aliasing"
+CFLAGS="$CFLAGS -O0 -g -fno-strict-aliasing"
 CFLAGS="$CFLAGS -Wall -Wundef -Wendif-labels -Wwrite-strings -Wmissing-prototypes -Wstrict-prototypes -Wredundant-decls"
 LDFLAGS="$LDFLAGS -g"
 if test "$werror" = "yes" ; then

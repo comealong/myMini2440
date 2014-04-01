@@ -171,7 +171,9 @@ static uint32_t s3c2440_nand_read(void *opaque, target_phys_addr_t addr)
         printf("%s: Bad register 0x%lx\n", __FUNCTION__, (unsigned long)addr);
         break;
     }
-    return 0;
+
+	// nand_setrnb(s->nand, 1);
+	return 0;
 }
 
 /*
@@ -226,6 +228,7 @@ static void s3c2440_nand_write(void *opaque, target_phys_addr_t addr,
         }
         break;
     case S3C_NFSTAT:	// it's OK to write to this on the 2440
+    	nand_setrnb(s->nand, value);
 		break;
     case S3C_NFADDR:
 #if 0
@@ -283,6 +286,8 @@ static void s3c2440_nand_write(void *opaque, target_phys_addr_t addr,
     default:
         printf("%s: Bad register 0x%lx=%x\n", __FUNCTION__, (unsigned long)addr, value);
     }
+	
+	// nand_setrnb(s->nand, 1);
 }
 
 /*

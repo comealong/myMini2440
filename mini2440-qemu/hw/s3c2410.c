@@ -2790,9 +2790,9 @@ struct s3c_state_s *s3c24xx_init(
                     qemu_ram_alloc(sdram_size) | IO_MEM_RAM);
 
     /* If OM pins are 00, SRAM is mapped at 0x0 instead.  */
-    cpu_register_physical_memory(sram_address, S3C_SRAM_SIZE,
-                    qemu_ram_alloc(S3C_SRAM_SIZE) | IO_MEM_RAM);
-
+    cpu_register_physical_memory(sram_address, S3C_SRAM_SIZE * 2,
+                    qemu_ram_alloc(S3C_SRAM_SIZE * 2) | IO_MEM_RAM);
+	
     s->mc_base = 0x48000000;
     s3c_mc_reset(s);
     iomemtype = cpu_register_io_memory(0, s3c_mc_readfn, s3c_mc_writefn, s);

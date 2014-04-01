@@ -53,7 +53,7 @@ struct NANDFlashState {
     BlockDriverState *bdrv;
     int mem_oob;
 
-    int cle, ale, ce, wp, gnd;
+    int cle, ale, ce, wp, gnd, rnb;
 
     uint8_t io[MAX_PAGE + MAX_OOB + 0x400];
     uint8_t *ioaddr;
@@ -355,9 +355,18 @@ void nand_setpins(NANDFlashState *s,
         s->status &= ~NAND_IOSTATUS_UNPROTCT;
 }
 
+void nand_setrnb(NANDFlashState *s, int rnb)
+{
+	printf("%s: old = %x, new: %x, p = %x\n", __FUNCTION__, s->rnb, rnb, s);
+	s->rnb = rnb;
+}
+
 void nand_getpins(NANDFlashState *s, int *rb)
 {
-    *rb = 1;
+	printf("%s: val = %x, p = %x\n", __FUNCTION__, s->rnb, s);
+    *rb = s->rnb;
+	if (s->rnb != 1)
+		s->rnb = 1;
 }
 
 void nand_setio(NANDFlashState *s, uint8_t value)
@@ -470,6 +479,7 @@ NANDFlashState *nand_init(int manf_id, int chip_id)
         s->bdrv = drives_table[index].bdrv;
     s->manf_id = manf_id;
     s->chip_id = chip_id;
+	s->rnb = 1;
     s->size = nand_flash_ids[s->chip_id].size << 20;
     if (nand_flash_ids[s->chip_id].options & NAND_SAMSUNG_LP) {
         s->page_shift = 11;

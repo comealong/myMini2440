@@ -35,7 +35,7 @@
 #define MINI2440_IRQ_nSD_DETECT		S3C_EINT(16)
 #define MINI2440_IRQ_DM9000			S3C_EINT(7)
 
-#define FLASH_NOR_SIZE (2*1024*1024)
+#define FLASH_NOR_SIZE (8*1024*1024)
 
 #define BOOT_NONE	0
 #define BOOT_NOR	1
@@ -261,6 +261,17 @@ static int mini2440_load_from_nand(NANDFlashState *nand,
 	return (int) size;
 }
 
+static int mini2440_load_from_nor(pflash_t* flash)
+{
+	cpu_register_physical_memory(0, FLASH_NOR_SIZE,
+		qemu_ram_alloc(FLASH_NOR_SIZE) | IO_MEM_RAM);
+	void* buf = (void* )malloc(FLASH_NOR_SIZE);
+	bdrv_pread(*(BlockDriverState** )flash, 0, buf, FLASH_NOR_SIZE);
+	cpu_physical_memory_write(0, (uint8_t *)buf, FLASH_NOR_SIZE);
+	free(buf);
+	return 0;
+}
+
 static void mini2440_reset(void *opaque)
 {
     struct mini2440_board_s *s = (struct mini2440_board_s *) opaque;
@@ -278,10 +289,11 @@ static void mini2440_reset(void *opaque)
 			mini2440_printf("loaded default u-boot from NAND\n");
 			s->cpu->env->regs[15] = S3C_RAM_BASE | 0x03f80000; /* start address, u-boot already relocated */
 		}
+
 #if 0 && defined(LATER)
 		if (mini2440_load_from_nand(s->nand, 0, S3C_SRAM_BASE_NANDBOOT, S3C_SRAM_SIZE) > 0) {
 			s->cpu->env->regs[15] = S3C_SRAM_BASE_NANDBOOT;	/* start address, u-boot relocating code */
-			mini2440_printf("4KB SteppingStone loaded from NAND\n");
+			printf("4KB SteppingStone loaded from NAND\n");
 		}
 #endif
 
@@ -320,6 +332,22 @@ static const int mini2440_ts_scale[6] = {
     (940 - 75) * 256 / 1021, 0, 75 * 256 * 32,
 };
 
+
+/* Memory controller */
+#define S3C_BWSCON	0x00	/* Bus Width & Wait Control register */
+#define S3C_BANKCON0	0x04	/* Bank 0 Control register */
+#define S3C_BANKCON1	0x08	/* Bank 1 Control register */
+#define S3C_BANKCON2	0x0c	/* Bank 2 Control register */
+#define S3C_BANKCON3	0x10	/* Bank 3 Control register */
+#define S3C_BANKCON4	0x14	/* Bank 4 Control register */
+#define S3C_BANKCON5	0x18	/* Bank 5 Control register */
+#define S3C_BANKCON6	0x1c	/* Bank 6 Control register */
+#define S3C_BANKCON7	0x20	/* Bank 7 Control register */
+#define S3C_REFRESH	0x24	/* SDRAM Refresh Control register */
+#define S3C_BANKSIZE	0x28	/* Flexible Bank Size register */
+#define S3C_MRSRB6	0x2c	/* Bank 6 Mode Set register */
+#define S3C_MRSRB7	0x30	/* Bank 6 Mode Set register */
+
 static void
 mini2440_init(
 		ram_addr_t ram_size,
@@ -335,8 +363,8 @@ mini2440_init(
     int nor_idx = drive_get_index(IF_PFLASH, 0, 0);
     int nand_idx = drive_get_index(IF_MTD, 0, 0);
     int nand_cid = 0x76;		// 128MB flash == 0xf1
-
-    mini->ram = 0x04000000;
+    
+    mini->ram = 0x08000000; //0x08000000;
     mini->kernel = kernel_filename;
     mini->mmc = sd_idx >= 0 ? sd_init(drives_table[sd_idx].bdrv, 0) : NULL;
     mini->boot_mode = BOOT_NAND;
@@ -364,26 +392,37 @@ mini2440_init(
     			printf("%s MINI2440_BOOT(nand) error, no flash file specified", __func__);
     			abort();
     		} else
-    		    mini->boot_mode = BOOT_NOR;
+    		    mini->boot_mode = BOOT_NAND;
     	} else
 			printf("%s MINI2440_BOOT(%s) ignored, invalid value", __func__, boot_mode);
     }
     printf("%s: Boot mode: %s\n", __func__, mini->boot_mode == BOOT_NOR ? "NOR": "NAND");
     /* Check the boot mode */
+	int nand_size = 0;
+	
+	if (nand_idx >= 0)
+		nand_size = bdrv_getlength(drives_table[nand_idx].bdrv);
     switch (mini->boot_mode) {
     	case BOOT_NAND:
     	    sram_base = S3C_SRAM_BASE_NANDBOOT;
-    	    int size = bdrv_getlength(drives_table[nand_idx].bdrv);
-    	    switch (size) {
-    	    	case 2 * 65536 * (512 + 16):
+    	    
+    	    switch (nand_size) {
+    	    	case 2 * 65536 * (512 + 16):					
 					nand_cid = 0x76;
     	    		break;
     	    	case 4 * 65536 * (512 + 16):
-    	    		nand_cid = 0xf1;
+		    		// nand_cid = 0xf1;    	    		
+    	    		nand_cid = 0x79;
 					break;
+
+				case 8 * 65536 * (512 + 16):
+		    		//nand_cid = 0xf1;    	    		
+    	    		nand_cid = 0x71;
+					break;
+
     	    	default:
     	    		printf("%s: Unknown NAND size/id %d (%dMB) defaulting to old 64MB\n",
-    	    				__func__, size, ((size / (512 + 16)) * 512) / 1024 / 1024);
+    	    				__func__, nand_size, ((nand_size / (512 + 16)) * 512) / 1024 / 1024);
     	    		break;
     	    }
     	    break;
@@ -399,6 +438,9 @@ mini2440_init(
     }
 
     mini->cpu = s3c24xx_init(S3C_CPU_2440, 12000000 /* 12 mhz */, mini->ram, sram_base, mini->mmc);
+	// mini->cpu->env->tlb_table[0][0].addr_code = 0;
+	// printf("%s: s2c_state: %p, cpu_state: %p\n", __FUNCTION__, mini->cpu, mini->cpu->env);
+	mini->cpu->mc_regs[S3C_BANKCON6 >> 2] = 0x1800a; // 0x1800a;
 
     /* Setup peripherals */
     mini2440_gpio_setup(mini);
@@ -425,14 +467,23 @@ mini2440_init(
 	// 128MB nand -- the hardware can also have 256, 1GB parts
     mini->nand = nand_init(NAND_MFR_SAMSUNG, nand_cid);
     mini->cpu->nand->reg(mini->cpu->nand, mini->nand);
+	/* if (mini->boot_mode == BOOT_NOR) */ {
+		/* mini->nor = pflash_cfi02_register(0, 
+			qemu_ram_alloc(FLASH_NOR_SIZE),
+			nor_idx != -1 ? drives_table[nor_idx].bdrv : NULL, (64 * 1024),
+			FLASH_NOR_SIZE >> 16,
+			1, 2, 0x0000, 0x0000, 0x0000, 0x0000,
+			0x555, 0x2aa); */
 
-	mini->nor = pflash_cfi02_register(0, 
-		qemu_ram_alloc(FLASH_NOR_SIZE),
-		nor_idx != -1 ? drives_table[nor_idx].bdrv : NULL, (64 * 1024),
-		FLASH_NOR_SIZE >> 16,
-		1, 2, 0x0000, 0x0000, 0x0000, 0x0000,
-		0x555, 0x2aa);
-
+		mini->nor = pflash_cfi02_register(0, 
+			qemu_ram_alloc(FLASH_NOR_SIZE),
+			nor_idx != -1 ? drives_table[nor_idx].bdrv : NULL, (64 * 1024),
+			FLASH_NOR_SIZE >> 16,
+			0, 2, 0x0000, 0x0000, 0x0000, 0x0000,
+			0x555, 0x2aa);
+		
+		mini2440_load_from_nor(mini->nor);
+	}
     mini2440_reset(mini);
 }
 

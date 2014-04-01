@@ -38,10 +38,10 @@
  * Also use this if loading the bootloader directly via JTAG
  * Mote that this is incompatible with NOR booting.
  */
-//#define CONFIG_LL_INIT_NAND_ONLY	1
+#define CONFIG_LL_INIT_NAND_ONLY	1
 
-//#define CONFIG_S3C2410_NAND_BOOT	1
-//#define CONFIG_S3C2410_NAND_SKIP_BAD	1
+#define CONFIG_S3C2410_NAND_BOOT	1
+#define CONFIG_S3C2410_NAND_SKIP_BAD	1
 
 #define CFG_UBOOT_SIZE		0x40000 /* size of u-boot, for NAND loading */
 
@@ -144,7 +144,7 @@
 #define CONFIG_IPADDR		10.0.0.111
 #define CONFIG_SERVERIP		10.0.0.4
 
-#define CONFIG_BOOTCOMMAND	""
+#define CONFIG_BOOTCOMMAND	"nboot kernel;bootm"
 
 #define CONFIG_DOS_PARTITION	1
 
