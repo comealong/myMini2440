@@ -35,7 +35,7 @@
 #define MINI2440_IRQ_nSD_DETECT		S3C_EINT(16)
 #define MINI2440_IRQ_DM9000			S3C_EINT(7)
 
-#define FLASH_NOR_SIZE (8*1024*1024)
+#define FLASH_NOR_SIZE (2*1024*1024)
 
 #define BOOT_NONE	0
 #define BOOT_NOR	1
@@ -70,6 +70,7 @@ typedef struct ee24c08_s {
 	uint16_t ptr;
 	uint16_t count;
 	uint8_t data[1024];
+	uint8_t reset;
 } ee24c08;
 
 static void ee24c08_event(i2c_slave *i2c, enum i2c_event event)
@@ -79,8 +80,9 @@ static void ee24c08_event(i2c_slave *i2c, enum i2c_event event)
     if (!s->eeprom)
     	return;
 
-    s->eeprom->ptr = s->page * 256;
-    s->eeprom->count = 0;
+	s->eeprom->reset = 1;
+    // s->eeprom->ptr = s->page * 256;
+    // s->eeprom->count = 0;
 }
 
 static int ee24c08_tx(i2c_slave *i2c, uint8_t data)
@@ -89,29 +91,40 @@ static int ee24c08_tx(i2c_slave *i2c, uint8_t data)
 
     if (!s->eeprom)
     	return 0;
-    if (s->eeprom->count++ == 0) {
+	
+    if (s->eeprom->reset) {
     	/* first byte is address offset */
+		// s->eeprom->count++;
         s->eeprom->ptr = (s->page * 256) + data;
     } else {
     	mini2440_printf("write %04x=%02x\n", s->eeprom->ptr, data);
     	s->eeprom->data[s->eeprom->ptr] = data;
         s->eeprom->ptr = (s->eeprom->ptr & ~0xff) | ((s->eeprom->ptr + 1) & 0xff);
-        s->eeprom->count++;
+		if (s->eeprom->ptr >= s->eeprom->count)
+			 s->eeprom->count =  s->eeprom->ptr + 1;
+        // s->eeprom->count++;
     }
+	
+	s->eeprom->reset = 0;
     return 0;
 }
 
 static int ee24c08_rx(i2c_slave *i2c)
 {
     ee24cxx_page_s *s = FROM_I2C_SLAVE(ee24cxx_page_s, i2c);
+	s->eeprom->reset = 0;
+	
     uint8_t res;
     if (!s->eeprom)
     	return 0;
 
     res =  s->eeprom->data[s->eeprom->ptr];
 
+	mini2440_printf("read %04x=%02x\n", s->eeprom->ptr, res);
     s->eeprom->ptr = (s->eeprom->ptr & ~0xff) | ((s->eeprom->ptr + 1) & 0xff);
-    s->eeprom->count++;
+    // s->eeprom->count++;
+	if (s->eeprom->ptr >= s->eeprom->count)
+		 s->eeprom->count =  s->eeprom->ptr + 1;
     return res;
 }
 
@@ -468,12 +481,12 @@ mini2440_init(
     mini->nand = nand_init(NAND_MFR_SAMSUNG, nand_cid);
     mini->cpu->nand->reg(mini->cpu->nand, mini->nand);
 	/* if (mini->boot_mode == BOOT_NOR) */ {
-		/* mini->nor = pflash_cfi02_register(0, 
+		/*mini->nor = pflash_cfi02_register(0, 
 			qemu_ram_alloc(FLASH_NOR_SIZE),
 			nor_idx != -1 ? drives_table[nor_idx].bdrv : NULL, (64 * 1024),
 			FLASH_NOR_SIZE >> 16,
 			1, 2, 0x0000, 0x0000, 0x0000, 0x0000,
-			0x555, 0x2aa); */
+			0x555, 0x2aa);*/
 
 		mini->nor = pflash_cfi02_register(0, 
 			qemu_ram_alloc(FLASH_NOR_SIZE),
